@@ -1,5 +1,3 @@
-#include "arduino_secrets.h"
-
 #include <Adafruit_Sensor.h>
 #include <DHT.h>
 #include <DHT_U.h>
