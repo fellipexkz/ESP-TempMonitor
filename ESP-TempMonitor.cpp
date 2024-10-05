@@ -110,7 +110,7 @@ void loop() {
     Serial.println("Dados enviados com sucesso para o ThingSpeak!");
     display.println("Dados enviados!");
   } else {
-    Serial.println("Erro ao enviar os dados. CÃ³digo de erro: " + String(response));
+    Serial.println("Erro ao enviar os dados. Código de erro: " + String(response));
     display.println("Erro ao enviar!");
   }
 
