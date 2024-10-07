@@ -17,18 +17,21 @@
 Adafruit_SSD1306 display(LARGURA_TELA, ALTURA_TELA, &Wire, REINICIAR_OLED);
 DHT dht(DHTPIN, DHTTYPE);
 
-const char* nome = "ZTE";
-const char* senha = "ViyGuMe885Nf";
+const char *nome = "ZTE";
+const char *senha = "ViyGuMe885Nf";
 
 const int channel = 2667623;
-const char* apiKey = "Y0ZCIXD17CAV80TV";
+const char *apiKey = "Y0ZCIXD17CAV80TV";
 
 WiFiClient cliente;
 
-void configurarDisplay() {
-  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+void configurarDisplay()
+{
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C))
+  {
     Serial.println(F("Falha ao inicializar o display SSD1306"));
-    for (;;);
+    for (;;)
+      ;
   }
   display.clearDisplay();
   display.setTextSize(1);
@@ -39,7 +42,8 @@ void configurarDisplay() {
   delay(3000);
 }
 
-void conectarWiFi() {
+void conectarWiFi()
+{
   display.clearDisplay();
   display.setCursor(0, 0);
   display.println("Conectando ao WiFi...");
@@ -47,7 +51,8 @@ void conectarWiFi() {
 
   Serial.println("Conectando ao WiFi...");
   WiFi.begin(nome, senha);
-  while (WiFi.status() != WL_CONNECTED) {
+  while (WiFi.status() != WL_CONNECTED)
+  {
     delay(1000);
     Serial.print(".");
   }
@@ -62,25 +67,38 @@ void conectarWiFi() {
   delay(3000);
 }
 
-void lerSensor(float &umidade, float &temperatura) {
+void lerSensor(float &umidade, float &temperatura)
+{
   umidade = dht.readHumidity();
   temperatura = dht.readTemperature();
 }
 
-void exibirDadosDisplay(float umidade, float temperatura) {
+void exibirDadosDisplay(float umidade, float temperatura, const char *status)
+{
   display.clearDisplay();
+
+  display.setTextSize(1);
   display.setCursor(0, 0);
-  display.print("Temperatura: ");
+  display.println(status);
+
+  display.drawLine(0, 12, LARGURA_TELA, 12, WHITE);
+
+  display.setTextSize(2);
+  display.setCursor(0, 20);
+  display.print("Temp: ");
   display.print(temperatura, 1);
-  display.println(" C");
-  display.print("Umidade: ");
+
+  display.setCursor(0, 40);
+  display.print("Umid: ");
   display.print(umidade, 1);
-  display.println(" %");
+
   display.display();
 }
 
-void enviarThingSpeak(float temperatura, float umidade) {
-  if (WiFi.status() != WL_CONNECTED) {
+void enviarThingSpeak(float temperatura, float umidade)
+{
+  if (WiFi.status() != WL_CONNECTED)
+  {
     conectarWiFi();
   }
 
@@ -88,18 +106,23 @@ void enviarThingSpeak(float temperatura, float umidade) {
   ThingSpeak.setField(2, umidade);
   int resposta = ThingSpeak.writeFields(channel, apiKey);
 
-  display.setCursor(0, 50);
-  if (resposta == 200) {
+  const char *status;
+  if (resposta == 200)
+  {
     Serial.println("\nDados enviados com sucesso para o ThingSpeak!");
-    display.println("Dados enviados!");
-  } else {
-    Serial.println("\nErro ao enviar os dados. Código de erro: " + String(resposta));
-    display.println("Erro ao enviar!");
+    status = "Dados enviados!";
   }
-  display.display();
+  else
+  {
+    Serial.println("\nErro ao enviar os dados. Código de erro: " + String(resposta));
+    status = "Erro ao enviar!";
+  }
+
+  exibirDadosDisplay(umidade, temperatura, status);
 }
 
-void setup() {
+void setup()
+{
   Serial.begin(9600);
   dht.begin();
   Serial.println("Teste do sensor DHT");
@@ -109,8 +132,10 @@ void setup() {
   ThingSpeak.begin(cliente);
 }
 
-void loop() {
-  if (WiFi.status() != WL_CONNECTED) {
+void loop()
+{
+  if (WiFi.status() != WL_CONNECTED)
+  {
     conectarWiFi();
   }
 
@@ -118,14 +143,16 @@ void loop() {
   lerSensor(umidade, temperatura);
 
   int tentativas = 0;
-  while ((isnan(umidade) || isnan(temperatura)) && tentativas < 3) {
+  while ((isnan(umidade) || isnan(temperatura)) && tentativas < 3)
+  {
     Serial.println("Falha ao ler sensor DHT, tentando novamente...");
     delay(2000);
     lerSensor(umidade, temperatura);
     tentativas++;
   }
 
-  if (isnan(umidade) || isnan(temperatura)) {
+  if (isnan(umidade) || isnan(temperatura))
+  {
     Serial.println("Falha ao ler sensor DHT após 3 tentativas!");
     display.clearDisplay();
     display.setCursor(0, 0);
@@ -141,7 +168,6 @@ void loop() {
   Serial.print(umidade);
   Serial.print(" %\t");
 
-  exibirDadosDisplay(temperatura, umidade);
   enviarThingSpeak(temperatura, umidade);
 
   delay(600000);
