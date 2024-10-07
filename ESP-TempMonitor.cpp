@@ -106,19 +106,21 @@ void enviarThingSpeak(float temperatura, float umidade)
   ThingSpeak.setField(2, umidade);
   int resposta = ThingSpeak.writeFields(channel, apiKey);
 
-  const char *status;
   if (resposta == 200)
   {
     Serial.println("\nDados enviados com sucesso para o ThingSpeak!");
-    status = "Dados enviados!";
+    exibirDadosDisplay(umidade, temperatura, "Dados enviados!");
   }
   else
   {
-    Serial.println("\nErro ao enviar os dados. Código de erro: " + String(resposta));
-    status = "Erro ao enviar!";
+    Serial.print("Erro ao enviar os dados. Código de erro: ");
+    Serial.println(resposta);
+    if (resposta == -301)
+    {
+      Serial.println("Erro: DNS falhou. Verifique a conexão de rede.");
+    }
+    exibirDadosDisplay(umidade, temperatura, "Erro ao enviar!");
   }
-
-  exibirDadosDisplay(umidade, temperatura, status);
 }
 
 void setup()
