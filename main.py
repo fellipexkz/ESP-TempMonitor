@@ -21,7 +21,6 @@ url = f'https://api.thingspeak.com/update?api_key={apiKey}'
 def configurar_display():
     if not display:
         raise Exception("Falha ao inicializar o display.")
-
     display.fill(0)
     display.text("Teste do sensor DHT", 0, 0)
     display.show()
@@ -32,14 +31,11 @@ def conectar_wifi():
     display.fill(0)
     display.text("Conectando ao WiFi...", 0, 0)
     display.show()
-
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
     wlan.connect(nome, senha)
-
     while not wlan.isconnected():
         time.sleep(1)
-
     display.fill(0)
     display.text("Conectado ao WiFi!", 0, 0)
     display.text("IP: {}".format(wlan.ifconfig()[0]), 0, 20)
@@ -48,44 +44,60 @@ def conectar_wifi():
 
 
 def ler_sensor():
-    dht.measure()
-    temperatura = dht.temperature()
-    umidade = dht.humidity()
-    return umidade, temperatura
+    try:
+        dht.measure()
+        temperatura = dht.temperature()
+        umidade = dht.humidity()
+        return umidade, temperatura
+    except Exception as e:
+        print("Erro ao ler o sensor:", e)
+        return None, None
 
 
 def exibir_dados_display(umidade, temperatura, status):
-    display.fill(0)  # Limpa o display
-
-    display.text(status, 0, 0)  # Exibe o status na linha 0
-    display.hline(0, 12, 128, 1)  # Desenha uma linha horizontal na linha 12
-
-    display.text("Temp: {:.1f} C".format(temperatura), 0, 20)  # Exibe a temperatura na linha 20
-    display.text("Umid: {:.1f} %".format(umidade), 0, 40)  # Exibe a umidade na linha 40
-
-    display.show()  # Atualiza o display
+    display.fill(0)
+    display.text(status, 0, 0)
+    display.hline(0, 12, 128, 1)
+    display.text("Temp: {:.1f} C".format(temperatura), 0, 20)
+    display.text("Umid: {:.1f} %".format(umidade), 0, 40)
+    display.show()
 
 
 def enviar_thingspeak(temperatura, umidade):
     display.fill(0)
     display.text("Enviando dados...", 0, 0)
     display.show()
-    response = urequests.get(url + f'&field1={temperatura}&field2={umidade}')
+    retries = 3
+    for attempt in range(retries):
+        response = urequests.get(url + f'&field1={temperatura}&field2={umidade}')
+        if response.status_code == 200:
+            print("Dados enviados com sucesso!")
+            exibir_dados_display(umidade, temperatura, "Dados enviados!")
+            response.close()  # Fechar a resposta
+            break
+        else:
+            print(f"Tentativa {attempt + 1} falhou: {response.status_code}")
+            if attempt == retries - 1:
+                exibir_dados_display(umidade, temperatura, "Erro ao enviar!")
+        response.close()  # Fechar a resposta após a tentativa
+        time.sleep(5)
 
-    if response.status_code == 200:
-        print("Dados enviados com sucesso!")
-        exibir_dados_display(umidade, temperatura, "Dados enviados!")
-    else:
-        print("Erro ao enviar os dados:", response.status_code)
-        exibir_dados_display(umidade, temperatura, "Erro ao enviar!")
 
-    response.close()
+
+def verificar_conexao_wifi():
+    wlan = network.WLAN(network.STA_IF)
+    return wlan.isconnected()
 
 
 configurar_display()
 conectar_wifi()
 
+INTERVALO_DE_LEITURA = 600
+
 while True:
+    if not verificar_conexao_wifi():
+        conectar_wifi()
+
     umidade, temperatura = ler_sensor()
 
     if umidade is None or temperatura is None:
@@ -98,4 +110,4 @@ while True:
 
     enviar_thingspeak(temperatura, umidade)
 
-    time.sleep(30)
+    time.sleep(INTERVALO_DE_LEITURA)
