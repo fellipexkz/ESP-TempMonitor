@@ -28,14 +28,19 @@ def configurar_display():
 
 
 def conectar_wifi():
-    display.fill(0)
-    display.text("Conectando ao WiFi...", 0, 0)
-    display.show()
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
-    wlan.connect(nome, senha)
-    while not wlan.isconnected():
-        time.sleep(1)
+    if not wlan.isconnected():
+        display.fill(0)
+        display.text("Conectando ao WiFi...", 0, 0)
+        display.show()
+        wlan.connect(nome, senha)
+        for _ in range(10):
+            if wlan.isconnected():
+                break
+            time.sleep(1)
+        if not wlan.isconnected():
+            raise Exception("Falha ao conectar ao WiFi")
     display.fill(0)
     display.text("Conectado ao WiFi!", 0, 0)
     display.text("IP: {}".format(wlan.ifconfig()[0]), 0, 20)
@@ -44,14 +49,17 @@ def conectar_wifi():
 
 
 def ler_sensor():
-    try:
-        dht.measure()
-        temperatura = dht.temperature()
-        umidade = dht.humidity()
-        return umidade, temperatura
-    except Exception as e:
-        print("Erro ao ler o sensor:", e)
-        return None, None
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            dht.measure()
+            temperatura = dht.temperature()
+            umidade = dht.humidity()
+            return umidade, temperatura
+        except Exception as e:
+            print(f"Erro ao ler o sensor (tentativa {attempt + 1}):", e)
+            time.sleep(2)
+    return None, None
 
 
 def exibir_dados_display(umidade, temperatura, status):
@@ -63,25 +71,43 @@ def exibir_dados_display(umidade, temperatura, status):
     display.show()
 
 
+import machine
+
+
 def enviar_thingspeak(temperatura, umidade):
+    retries = 5
     display.fill(0)
     display.text("Enviando dados...", 0, 0)
     display.show()
-    retries = 3
+
+    response = None
+
     for attempt in range(retries):
-        response = urequests.get(url + f'&field1={temperatura}&field2={umidade}')
-        if response.status_code == 200:
-            print("Dados enviados com sucesso!")
-            exibir_dados_display(umidade, temperatura, "Dados enviados!")
-            response.close()  # Fechar a resposta
-            break
-        else:
-            print(f"Tentativa {attempt + 1} falhou: {response.status_code}")
-            if attempt == retries - 1:
-                exibir_dados_display(umidade, temperatura, "Erro ao enviar!")
-        response.close()  # Fechar a resposta após a tentativa
+        try:
+            response = urequests.get(url + f'&field1={temperatura}&field2={umidade}')
+            if response.status_code == 200:
+                print("Dados enviados com sucesso!")
+                exibir_dados_display(umidade, temperatura, "Dados enviados!")
+                response.close()
+                return
+            else:
+                print(f"Tentativa {attempt + 1} falhou: {response.status_code}")
+        except Exception as e:
+            print(f"Erro ao enviar dados (tentativa {attempt + 1}): {e}")
+
+        if response:
+            response.close()
+
         time.sleep(5)
 
+    print("Falha ao enviar dados após 5 tentativas. Reiniciando o ESP32...")
+    display.fill(0)
+    display.text("Erro fatal!", 0, 0)
+    display.text("Reiniciando...", 0, 20)
+    display.show()
+    time.sleep(3)
+
+    machine.reset()
 
 
 def verificar_conexao_wifi():
@@ -89,14 +115,21 @@ def verificar_conexao_wifi():
     return wlan.isconnected()
 
 
-configurar_display()
-conectar_wifi()
+def inicializar_sistema():
+    configurar_display()
+    conectar_wifi()
+
+
+inicializar_sistema()
 
 INTERVALO_DE_LEITURA = 600
 
 while True:
     if not verificar_conexao_wifi():
         conectar_wifi()
+        INTERVALO_DE_LEITURA = 60
+    else:
+        INTERVALO_DE_LEITURA = 600
 
     umidade, temperatura = ler_sensor()
 
