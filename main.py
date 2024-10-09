@@ -1,5 +1,6 @@
 import time
 import network
+import machine
 from machine import Pin, I2C
 import ssd1306
 import urequests
@@ -7,6 +8,7 @@ from dht import DHT22
 
 DHTPIN = 4
 dht = DHT22(Pin(DHTPIN))
+INTERVALO_DE_LEITURA = 300
 
 I2C_ADDR = 0x3C
 i2c = I2C(0, scl=Pin(22), sda=Pin(21))
@@ -55,10 +57,18 @@ def ler_sensor():
             dht.measure()
             temperatura = dht.temperature()
             umidade = dht.humidity()
-            return umidade, temperatura
+            if temperatura is not None and umidade is not None:
+                return umidade, temperatura
+            else:
+                raise Exception("Falha na leitura do sensor")
         except Exception as e:
             print(f"Erro ao ler o sensor (tentativa {attempt + 1}):", e)
             time.sleep(2)
+
+    print("Falha ao ler o sensor após várias tentativas. Reiniciando o ESP32...")
+    exibir_dados_display(0, 0, "Erro sensor! Reiniciando...")
+    time.sleep(3)
+    machine.reset()
     return None, None
 
 
@@ -71,20 +81,19 @@ def exibir_dados_display(umidade, temperatura, status):
     display.show()
 
 
-import machine
-
-
 def enviar_thingspeak(temperatura, umidade):
     retries = 5
+    timeout_duration = 5
+
     display.fill(0)
     display.text("Enviando dados...", 0, 0)
     display.show()
 
-    response = None
-
     for attempt in range(retries):
         try:
-            response = urequests.get(url + f'&field1={temperatura}&field2={umidade}')
+            if not verificar_conexao_wifi():
+                conectar_wifi()
+            response = urequests.get(url + f'&field1={temperatura}&field2={umidade}', timeout=timeout_duration)
             if response.status_code == 200:
                 print("Dados enviados com sucesso!")
                 exibir_dados_display(umidade, temperatura, "Dados enviados!")
@@ -94,19 +103,15 @@ def enviar_thingspeak(temperatura, umidade):
                 print(f"Tentativa {attempt + 1} falhou: {response.status_code}")
         except Exception as e:
             print(f"Erro ao enviar dados (tentativa {attempt + 1}): {e}")
-
-        if response:
-            response.close()
+        finally:
+            if response:
+                response.close()
 
         time.sleep(5)
 
     print("Falha ao enviar dados após 5 tentativas. Reiniciando o ESP32...")
-    display.fill(0)
-    display.text("Erro fatal!", 0, 0)
-    display.text("Reiniciando...", 0, 20)
-    display.show()
+    exibir_dados_display(umidade, temperatura, "Erro fatal! Reiniciando...")
     time.sleep(3)
-
     machine.reset()
 
 
@@ -122,14 +127,12 @@ def inicializar_sistema():
 
 inicializar_sistema()
 
-INTERVALO_DE_LEITURA = 600
-
 while True:
     if not verificar_conexao_wifi():
         conectar_wifi()
         INTERVALO_DE_LEITURA = 60
     else:
-        INTERVALO_DE_LEITURA = 600
+        INTERVALO_DE_LEITURA = 300
 
     umidade, temperatura = ler_sensor()
 
