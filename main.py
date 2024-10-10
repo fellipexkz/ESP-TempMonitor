@@ -7,22 +7,24 @@ import urequests
 from dht import DHT22
 
 DHTPIN = 4
-dht = DHT22(Pin(DHTPIN))
-INTERVALO_DE_LEITURA = 300
-
+INTERVALO_DE_LEITURA_NORMAL = 60
+INTERVALO_DE_LEITURA_ERRO = 30
 I2C_ADDR = 0x3C
-i2c = I2C(0, scl=Pin(22), sda=Pin(21))
-display = ssd1306.SSD1306_I2C(128, 64, i2c)
+I2C_SCL_PIN = 22
+I2C_SDA_PIN = 21
+DISPLAY_WIDTH = 128
+DISPLAY_HEIGHT = 64
+WIFI_SSID = "ZTE"
+WIFI_PASSWORD = "ViyGuMe885Nf"
+THINGSPEAK_API_KEY = "Y0ZCIXD17CAV80TV"
+THINGSPEAK_URL = f'https://api.thingspeak.com/update?api_key={THINGSPEAK_API_KEY}'
 
-nome = "ZTE"
-senha = "ViyGuMe885Nf"
-apiKey = "Y0ZCIXD17CAV80TV"
-url = f'https://api.thingspeak.com/update?api_key={apiKey}'
+dht = DHT22(Pin(DHTPIN))
+i2c = I2C(0, scl=Pin(I2C_SCL_PIN), sda=Pin(I2C_SDA_PIN))
+display = ssd1306.SSD1306_I2C(DISPLAY_WIDTH, DISPLAY_HEIGHT, i2c)
 
 
 def configurar_display():
-    if not display:
-        raise Exception("Falha ao inicializar o display.")
     display.fill(0)
     display.text("Teste do sensor DHT", 0, 0)
     display.show()
@@ -33,91 +35,74 @@ def conectar_wifi():
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
     if not wlan.isconnected():
-        display.fill(0)
-        display.text("Conectando ao WiFi...", 0, 0)
-        display.show()
-        wlan.connect(nome, senha)
+        exibir_mensagem_display("Conectando ao WiFi...")
+        wlan.connect(WIFI_SSID, WIFI_PASSWORD)
         for _ in range(10):
             if wlan.isconnected():
                 break
             time.sleep(1)
         if not wlan.isconnected():
             raise Exception("Falha ao conectar ao WiFi")
-    display.fill(0)
-    display.text("Conectado ao WiFi!", 0, 0)
-    display.text("IP: {}".format(wlan.ifconfig()[0]), 0, 20)
-    display.show()
+    exibir_mensagem_display(f"Conectado ao WiFi!\nIP: {wlan.ifconfig()[0]}")
     time.sleep(3)
 
 
 def ler_sensor():
-    max_retries = 3
-    for attempt in range(max_retries):
+    for attempt in range(3):
         try:
             dht.measure()
             temperatura = dht.temperature()
             umidade = dht.humidity()
             if temperatura is not None and umidade is not None:
                 return umidade, temperatura
-            else:
-                raise Exception("Falha na leitura do sensor")
         except Exception as e:
             print(f"Erro ao ler o sensor (tentativa {attempt + 1}):", e)
             time.sleep(2)
-
-    print("Falha ao ler o sensor após várias tentativas. Reiniciando o ESP32...")
-    exibir_dados_display(0, 0, "Erro sensor! Reiniciando...")
-    time.sleep(3)
-    machine.reset()
-    return None, None
+    reiniciar_esp("Erro sensor! Reiniciando...")
 
 
 def exibir_dados_display(umidade, temperatura, status):
     display.fill(0)
     display.text(status, 0, 0)
     display.hline(0, 12, 128, 1)
-    display.text("Temp: {:.1f} C".format(temperatura), 0, 20)
-    display.text("Umid: {:.1f} %".format(umidade), 0, 40)
+    display.text(f"Temp: {temperatura:.1f} C", 0, 20)
+    display.text(f"Umid: {umidade:.1f} %", 0, 40)
+    display.show()
+
+
+def exibir_mensagem_display(mensagem):
+    display.fill(0)
+    for i, linha in enumerate(mensagem.split('\n')):
+        display.text(linha, 0, i * 10)
     display.show()
 
 
 def enviar_thingspeak(temperatura, umidade):
-    retries = 5
-    timeout_duration = 5
-
-    display.fill(0)
-    display.text("Enviando dados...", 0, 0)
-    display.show()
-
-    for attempt in range(retries):
+    exibir_mensagem_display("Enviando dados...")
+    for attempt in range(5):
         try:
             if not verificar_conexao_wifi():
                 conectar_wifi()
-            response = urequests.get(url + f'&field1={temperatura}&field2={umidade}', timeout=timeout_duration)
+            response = urequests.get(f'{THINGSPEAK_URL}&field1={temperatura}&field2={umidade}', timeout=5)
             if response.status_code == 200:
                 print("Dados enviados com sucesso!")
                 exibir_dados_display(umidade, temperatura, "Dados enviados!")
                 response.close()
                 return
-            else:
-                print(f"Tentativa {attempt + 1} falhou: {response.status_code}")
         except Exception as e:
             print(f"Erro ao enviar dados (tentativa {attempt + 1}): {e}")
-        finally:
-            if response:
-                response.close()
-
         time.sleep(5)
-
-    print("Falha ao enviar dados após 5 tentativas. Reiniciando o ESP32...")
-    exibir_dados_display(umidade, temperatura, "Erro fatal! Reiniciando...")
-    time.sleep(3)
-    machine.reset()
+    reiniciar_esp("Erro fatal! Reiniciando...")
 
 
 def verificar_conexao_wifi():
-    wlan = network.WLAN(network.STA_IF)
-    return wlan.isconnected()
+    return network.WLAN(network.STA_IF).isconnected()
+
+
+def reiniciar_esp(mensagem):
+    exibir_mensagem_display(mensagem)
+    time.sleep(3)
+    machine.reset()
 
 
 def inicializar_sistema():
@@ -130,20 +115,16 @@ inicializar_sistema()
 while True:
     if not verificar_conexao_wifi():
         conectar_wifi()
-        INTERVALO_DE_LEITURA = 60
+        intervalo_de_leitura = INTERVALO_DE_LEITURA_ERRO
     else:
-        INTERVALO_DE_LEITURA = 300
+        intervalo_de_leitura = INTERVALO_DE_LEITURA_NORMAL
 
     umidade, temperatura = ler_sensor()
-
     if umidade is None or temperatura is None:
         exibir_dados_display(0, 0, "Erro no sensor!")
         time.sleep(2)
         continue
 
-    print("Temperatura:", temperatura, "°C")
-    print("Umidade:", umidade, "%")
-
+    print(f"Temperatura: {temperatura} °C, Umidade: {umidade} %")
     enviar_thingspeak(temperatura, umidade)
-
-    time.sleep(INTERVALO_DE_LEITURA)
+    time.sleep(intervalo_de_leitura)
