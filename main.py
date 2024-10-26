@@ -7,8 +7,8 @@ import urequests
 from dht import DHT22
 
 DHTPIN = 4
-INTERVALO_DE_LEITURA_NORMAL = 60
-INTERVALO_DE_LEITURA_ERRO = 30
+INTERVALO_DE_LEITURA_NORMAL = 600
+INTERVALO_DE_LEITURA_ERRO = 60
 I2C_ADDR = 0x3C
 I2C_SCL_PIN = 22
 I2C_SDA_PIN = 21
@@ -128,3 +128,55 @@ while True:
     print(f"Temperatura: {temperatura} °C, Umidade: {umidade} %")
     enviar_thingspeak(temperatura, umidade)
     time.sleep(intervalo_de_leitura)
+
+
+"""
+# Código do receptor IR
+RECV_PIN = 15
+receiver = Pin(RECV_PIN, Pin.IN)
+
+def capturar_sinal_ir():
+    pulsos = []
+    start = time.ticks_us()
+    while time.ticks_diff(time.ticks_us(), start) < 1_000_000:
+        if receiver.value() == 0:
+            pulso_inicio = time.ticks_us()
+            while receiver.value() == 0:
+                pass
+            pulso_duracao = time.ticks_diff(time.ticks_us(), pulso_inicio)
+            pulsos.append(pulso_duracao)
+
+    print("Sinal IR capturado:", pulsos)
+    return pulsos
+
+while True:
+    print("Aguardando sinal IR...")
+    capturar_sinal_ir()
+    time.sleep(1)
+"""
+
+"""
+# Código do emissor IR
+SEND_PIN = 2
+emissor = Pin(SEND_PIN, Pin.OUT)
+
+codigo_ir_ligar = []
+codigo_ir_desligar = []
+
+def transmitir_sinal_ir(pulsos):
+    for pulso in pulsos:
+        emissor.on()
+        time.sleep_us(pulso)
+        emissor.off()
+        time.sleep_us(500)
+
+def controlar_ar_condicionado(temperatura):
+    if temperatura >= 25:
+        print("Temperatura alta. Ligando ar-condicionado...")
+        # Fazer a exibição no display também
+        transmitir_sinal_ir(codigo_ir_ligar)
+    elif temperatura <= 22:
+        print("Temperatura baixa. Desligando ar-condicionado...")
+        # Fazer a exibição no display também
+        transmitir_sinal_ir(codigo_ir_desligar)
+"""
