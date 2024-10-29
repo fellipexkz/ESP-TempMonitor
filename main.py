@@ -127,9 +127,11 @@ def transmitir_sinal_ir(pulsos):
 def controlar_ar_condicionado(temperatura):
     if temperatura >= 30:
         print("Temperatura alta. Ligando ar-condicionado...")
+        transmitir_sinal_ir(codigo_ir_ligar)
         return "A/C Ligado"
     elif temperatura <= 25:
         print("Temperatura baixa. Desligando ar-condicionado...")
+        transmitir_sinal_ir(codigo_ir_desligar)
         return "A/C Desligado"
     else:
         return "Monitorando"
