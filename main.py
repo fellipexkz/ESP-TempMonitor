@@ -65,12 +65,13 @@ def ler_sensor():
     reiniciar_esp("Erro sensor! Reiniciando...")
 
 
-def exibir_dados_display(umidade, temperatura, status, ac_status=""):
+def exibir_dados_display(umidade, temperatura, status_envio, ac_status=""):
     display.fill(0)
-    display.text(status, 0, 0)
+    display.text(status_envio, 0, 0)
     display.hline(0, 12, 128, 1)
     display.text(f"Temp: {temperatura:.1f} C", 0, 20)
-    display.text(f"Umid: {umidade:.1f} %", 0, 40)
+    display.text(f"Umid: {umidade:.1f} %", 0, 30)
+    display.hline(0, 50, 128, 1)
     display.text(ac_status, 0, 55)
     display.show()
 
@@ -91,14 +92,13 @@ def enviar_thingspeak(temperatura, umidade):
             response = urequests.get(f'{THINGSPEAK_URL}&field1={temperatura}&field2={umidade}', timeout=5)
             if response.status_code == 200:
                 print("Dados enviados com sucesso!")
-                exibir_dados_display(umidade, temperatura, "Dados enviados!")
-                response.close()
-                return
+                return True
+            response.close()
         except Exception as e:
             print(f"Erro ao enviar dados (tentativa {attempt + 1}): {e}")
-            response.close()
         time.sleep(5)
     reiniciar_esp("Erro fatal! Reiniciando...")
+    return False
 
 
 def verificar_conexao_wifi():
@@ -127,14 +127,12 @@ def transmitir_sinal_ir(pulsos):
 def controlar_ar_condicionado(temperatura):
     if temperatura >= 30:
         print("Temperatura alta. Ligando ar-condicionado...")
-        exibir_dados_display(umidade, temperatura, "A/C Ligado", "Ligando A/C...")
-        transmitir_sinal_ir(codigo_ir_ligar)
+        return "A/C Ligado"
     elif temperatura <= 25:
         print("Temperatura baixa. Desligando ar-condicionado...")
-        exibir_dados_display(umidade, temperatura, "A/C Desligado", "Desligando A/C...")
-        transmitir_sinal_ir(codigo_ir_desligar)
+        return "A/C Desligado"
     else:
-        exibir_dados_display(umidade, temperatura, "Monitorando", "")
+        return "Monitorando"
 
 
 inicializar_sistema()
@@ -144,15 +142,20 @@ intervalo_de_leitura = INTERVALO_DE_LEITURA_NORMAL if verificar_conexao_wifi() e
 while True:
     umidade, temperatura = ler_sensor()
     if umidade is None or temperatura is None:
-        exibir_dados_display(0, 0, "Erro no sensor!")
+        exibir_dados_display(0, 0, "Erro no sensor!", "")
         time.sleep(2)
         continue
 
     print(f"Temperatura: {temperatura} °C, Umidade: {umidade} %")
-    enviar_thingspeak(temperatura, umidade)
 
-    controlar_ar_condicionado(temperatura)
+    if enviar_thingspeak(temperatura, umidade):
+        ac_status = controlar_ar_condicionado(temperatura)
+    else:
+        ac_status = "Erro ao enviar!"
+
+    exibir_dados_display(umidade, temperatura, "Dados enviados!", ac_status)
 
     if not verificar_conexao_wifi():
         conectar_wifi()
+
     time.sleep(intervalo_de_leitura)
