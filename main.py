@@ -2,9 +2,10 @@ import time
 import network
 import machine
 from machine import Pin, I2C
-import ssd1306
-import urequests
-from dht import DHT22
+from lib import ssd1306
+from lib import urequests
+from lib.dht import DHT22
+from config import nome_wifi, senha_wifi, chave_thingspeak
 
 DHTPIN = 4
 INTERVALO_DE_LEITURA_NORMAL = 600
@@ -14,14 +15,17 @@ I2C_SCL_PIN = 22
 I2C_SDA_PIN = 21
 DISPLAY_WIDTH = 128
 DISPLAY_HEIGHT = 64
-WIFI_SSID = "ZTE"
-WIFI_PASSWORD = "ViyGuMe885Nf"
-THINGSPEAK_API_KEY = "Y0ZCIXD17CAV80TV"
-THINGSPEAK_URL = f'https://api.thingspeak.com/update?api_key={THINGSPEAK_API_KEY}'
+THINGSPEAK_URL = f'https://api.thingspeak.com/update?api_key={chave_thingspeak}'
 
 dht = DHT22(Pin(DHTPIN))
 i2c = I2C(0, scl=Pin(I2C_SCL_PIN), sda=Pin(I2C_SDA_PIN))
 display = ssd1306.SSD1306_I2C(DISPLAY_WIDTH, DISPLAY_HEIGHT, i2c)
+
+SEND_PIN = 18
+emissor = Pin(SEND_PIN, Pin.OUT)
+
+codigo_ir_ligar = [4500, 4500, 500, 1600, 500, 500, 500, 1600]
+codigo_ir_desligar = [4500, 4500, 500, 1600, 500, 500, 500, 500]
 
 
 def configurar_display():
@@ -36,7 +40,7 @@ def conectar_wifi():
     wlan.active(True)
     if not wlan.isconnected():
         exibir_mensagem_display("Conectando ao WiFi...")
-        wlan.connect(WIFI_SSID, WIFI_PASSWORD)
+        wlan.connect(nome_wifi, senha_wifi)
         for _ in range(10):
             if wlan.isconnected():
                 break
@@ -61,12 +65,13 @@ def ler_sensor():
     reiniciar_esp("Erro sensor! Reiniciando...")
 
 
-def exibir_dados_display(umidade, temperatura, status):
+def exibir_dados_display(umidade, temperatura, status, ac_status=""):
     display.fill(0)
     display.text(status, 0, 0)
     display.hline(0, 12, 128, 1)
     display.text(f"Temp: {temperatura:.1f} C", 0, 20)
     display.text(f"Umid: {umidade:.1f} %", 0, 40)
+    display.text(ac_status, 0, 55)
     display.show()
 
 
@@ -91,6 +96,7 @@ def enviar_thingspeak(temperatura, umidade):
                 return
         except Exception as e:
             print(f"Erro ao enviar dados (tentativa {attempt + 1}): {e}")
+            response.close()
         time.sleep(5)
     reiniciar_esp("Erro fatal! Reiniciando...")
 
@@ -110,15 +116,32 @@ def inicializar_sistema():
     conectar_wifi()
 
 
+def transmitir_sinal_ir(pulsos):
+    for pulso in pulsos:
+        emissor.on()
+        time.sleep_us(pulso)
+        emissor.off()
+        time.sleep_us(500)
+
+
+def controlar_ar_condicionado(temperatura):
+    if temperatura >= 30:
+        print("Temperatura alta. Ligando ar-condicionado...")
+        exibir_dados_display(umidade, temperatura, "A/C Ligado", "Ligando A/C...")
+        transmitir_sinal_ir(codigo_ir_ligar)
+    elif temperatura <= 25:
+        print("Temperatura baixa. Desligando ar-condicionado...")
+        exibir_dados_display(umidade, temperatura, "A/C Desligado", "Desligando A/C...")
+        transmitir_sinal_ir(codigo_ir_desligar)
+    else:
+        exibir_dados_display(umidade, temperatura, "Monitorando", "")
+
+
 inicializar_sistema()
 
-while True:
-    if not verificar_conexao_wifi():
-        conectar_wifi()
-        intervalo_de_leitura = INTERVALO_DE_LEITURA_ERRO
-    else:
-        intervalo_de_leitura = INTERVALO_DE_LEITURA_NORMAL
+intervalo_de_leitura = INTERVALO_DE_LEITURA_NORMAL if verificar_conexao_wifi() else INTERVALO_DE_LEITURA_ERRO
 
+while True:
     umidade, temperatura = ler_sensor()
     if umidade is None or temperatura is None:
         exibir_dados_display(0, 0, "Erro no sensor!")
@@ -127,56 +150,9 @@ while True:
 
     print(f"Temperatura: {temperatura} °C, Umidade: {umidade} %")
     enviar_thingspeak(temperatura, umidade)
+
+    controlar_ar_condicionado(temperatura)
+
+    if not verificar_conexao_wifi():
+        conectar_wifi()
     time.sleep(intervalo_de_leitura)
-
-
-"""
-# Código do receptor IR
-RECV_PIN = 15
-receiver = Pin(RECV_PIN, Pin.IN)
-
-def capturar_sinal_ir():
-    pulsos = []
-    start = time.ticks_us()
-    while time.ticks_diff(time.ticks_us(), start) < 1_000_000:
-        if receiver.value() == 0:
-            pulso_inicio = time.ticks_us()
-            while receiver.value() == 0:
-                pass
-            pulso_duracao = time.ticks_diff(time.ticks_us(), pulso_inicio)
-            pulsos.append(pulso_duracao)
-
-    print("Sinal IR capturado:", pulsos)
-    return pulsos
-
-while True:
-    print("Aguardando sinal IR...")
-    capturar_sinal_ir()
-    time.sleep(1)
-"""
-
-"""
-# Código do emissor IR
-SEND_PIN = 2
-emissor = Pin(SEND_PIN, Pin.OUT)
-
-codigo_ir_ligar = []
-codigo_ir_desligar = []
-
-def transmitir_sinal_ir(pulsos):
-    for pulso in pulsos:
-        emissor.on()
-        time.sleep_us(pulso)
-        emissor.off()
-        time.sleep_us(500)
-
-def controlar_ar_condicionado(temperatura):
-    if temperatura >= 25:
-        print("Temperatura alta. Ligando ar-condicionado...")
-        # Fazer a exibição no display também
-        transmitir_sinal_ir(codigo_ir_ligar)
-    elif temperatura <= 22:
-        print("Temperatura baixa. Desligando ar-condicionado...")
-        # Fazer a exibição no display também
-        transmitir_sinal_ir(codigo_ir_desligar)
-"""
