@@ -31,6 +31,7 @@ codigo_ir_desligar = [4500, 4500, 500, 1600, 500, 500, 500, 500]
 def configurar_display():
     display.fill(0)
     display.text("Teste do sensor DHT", 0, 0)
+    print('Teste do sensor DHT')
     display.show()
     time.sleep(3)
 
@@ -40,6 +41,7 @@ def conectar_wifi():
     wlan.active(True)
     if not wlan.isconnected():
         exibir_mensagem_display("Conectando ao WiFi...")
+        print("Conectando ao WiFi...")
         wlan.connect(nome_wifi, senha_wifi)
         for _ in range(10):
             if wlan.isconnected():
@@ -48,6 +50,8 @@ def conectar_wifi():
         if not wlan.isconnected():
             raise Exception("Falha ao conectar ao WiFi")
     exibir_mensagem_display(f"Conectado ao WiFi!\nIP: {wlan.ifconfig()[0]}")
+    print("Conectado ao WiFi!")
+    print("IP:", wlan.ifconfig()[0])
     time.sleep(3)
 
 
@@ -134,7 +138,8 @@ def controlar_ar_condicionado(temperatura):
         transmitir_sinal_ir(codigo_ir_desligar)
         return "A/C Desligado"
     else:
-        return "Monitorando"
+        print('Temperatura normal. Monitorando...')
+        return "Monitorando..."
 
 
 inicializar_sistema()
